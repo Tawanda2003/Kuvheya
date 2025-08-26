@@ -7,29 +7,61 @@ import { Textarea } from "@/components/ui/textarea"
 import { Navigation } from "@/components/navigation"
 import { Mail, Phone, Linkedin, MapPin, ExternalLink, Send } from "lucide-react"
 import { CVDownload } from "@/components/cv-download"
-import { useState } from "react"
-import { sendContactMessage } from "./actions"
+import { useState, useEffect } from "react"
 
 export default function Contact() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [message, setMessage] = useState("")
+  const [isSuccess, setIsSuccess] = useState(false)
 
-  async function handleSubmit(formData: FormData) {
+  useEffect(() => {
+    if (!message) return
+    const t = setTimeout(() => setMessage(""), 6000)
+    return () => clearTimeout(t)
+  }, [message])
+
+  async function handleSubmitEvent(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
     setIsSubmitting(true)
     setMessage("")
+    setIsSuccess(false)
+
+    const form = e.currentTarget
+    const fd = new FormData(form)
+
+    // Basic client-side validation
+    const name = String(fd.get("name") || "").trim()
+    const email = String(fd.get("email") || "").trim()
+    const subject = String(fd.get("subject") || "").trim()
+    const msg = String(fd.get("message") || "").trim()
+
+    if (!name || !email || !subject || !msg) {
+      setMessage("Please fill in all required fields.")
+      setIsSubmitting(false)
+      return
+    }
 
     try {
-      const result = await sendContactMessage(formData)
-      if (result.success) {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, subject, message: msg }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (res.ok && data.success) {
         setMessage("Thank you! Your message has been sent successfully.")
-        // Reset form
-        const form = document.getElementById("contact-form") as HTMLFormElement
-        form?.reset()
+        setIsSuccess(true)
+        form.reset()
       } else {
-        setMessage("Sorry, there was an error sending your message. Please try again.")
+        setMessage(data?.error || "Sorry, there was an error sending your message. Please try again.")
+        setIsSuccess(false)
       }
-    } catch (error) {
+    } catch (err) {
+      console.error("Contact form error:", err)
       setMessage("Sorry, there was an error sending your message. Please try again.")
+      setIsSuccess(false)
     } finally {
       setIsSubmitting(false)
     }
@@ -56,7 +88,12 @@ export default function Contact() {
                   <CardTitle className="text-blue-600 text-xl md:text-2xl">Send Me a Message</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <form id="contact-form" action={handleSubmit} className="space-y-4 md:space-y-6">
+                  <form
+                    id="contact-form"
+                    onSubmit={handleSubmitEvent}
+                    className="space-y-4 md:space-y-6"
+                    aria-label="Contact form"
+                  >
                     <div className="grid md:grid-cols-2 gap-4">
                       <div>
                         <label htmlFor="name" className="block text-sm font-medium text-blue-600 mb-2">
@@ -67,6 +104,7 @@ export default function Contact() {
                           name="name"
                           type="text"
                           required
+                          disabled={isSubmitting}
                           className="border-blue-200 focus:border-blue-500"
                           placeholder="Your full name"
                         />
@@ -80,6 +118,7 @@ export default function Contact() {
                           name="email"
                           type="email"
                           required
+                          disabled={isSubmitting}
                           className="border-blue-200 focus:border-blue-500"
                           placeholder="your.email@example.com"
                         />
@@ -94,6 +133,7 @@ export default function Contact() {
                         name="subject"
                         type="text"
                         required
+                        disabled={isSubmitting}
                         className="border-blue-200 focus:border-blue-500"
                         placeholder="What's this about?"
                       />
@@ -107,6 +147,7 @@ export default function Contact() {
                         name="message"
                         required
                         rows={6}
+                        disabled={isSubmitting}
                         className="border-blue-200 focus:border-blue-500"
                         placeholder="Tell me about your project or how I can help you..."
                       />
@@ -128,10 +169,11 @@ export default function Contact() {
                         </>
                       )}
                     </Button>
+
                     {message && (
                       <div
                         className={`text-center p-3 rounded-md text-sm ${
-                          message.includes("successfully") ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                          isSuccess ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                         }`}
                       >
                         {message}
